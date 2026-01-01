@@ -218,3 +218,5 @@ data/external/
 reports/
 plots/
 outputs/
+# Python cache
+__pycache__/
