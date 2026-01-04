@@ -1,6 +1,9 @@
 import numpy as np
+import pandas as pd
 
-def performance_metrics(df, risk_free_rate=0.0):
+
+
+def calculate_metrics(df, risk_free_rate=0.0):
     returns = df["Strategy_Return"].dropna()
 
     total_return = df["Cumulative_Strategy"].iloc[-1] - 1
