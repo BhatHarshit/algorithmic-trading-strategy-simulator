@@ -6,10 +6,13 @@ import pandas as pd
 def sma_strategy(
     data: pd.DataFrame,
     short_window: int = 20,
-    long_window: int = 50
+    long_window: int = 50,
+    trend_window: int = 200
 ) -> pd.DataFrame:
     """
-    Simple Moving Average (SMA) crossover strategy.
+    SMA crossover strategy with trend regime filter.
+
+    Trades are only allowed when price is above long-term trend SMA.
 
     Parameters
     ----------
@@ -19,6 +22,8 @@ def sma_strategy(
         Short-term SMA window.
     long_window : int
         Long-term SMA window.
+    trend_window : int
+        Long-term trend filter window (default = 200).
 
     Returns
     -------
@@ -28,18 +33,35 @@ def sma_strategy(
 
     df = data.copy()
 
-    # Calculate SMAs
+    # ======================
+    # Moving Averages
+    # ======================
     df["SMA_Short"] = df["Close"].rolling(window=short_window).mean()
     df["SMA_Long"] = df["Close"].rolling(window=long_window).mean()
+    df["SMA_Trend"] = df["Close"].rolling(window=trend_window).mean()
 
-    # Initialize signal column
+    # ======================
+    # Signal Logic
+    # ======================
     df["Signal"] = 0
 
-    # Generate signals
-    df.loc[df["SMA_Short"] > df["SMA_Long"], "Signal"] = 1
-    df.loc[df["SMA_Short"] < df["SMA_Long"], "Signal"] = -1
+    # Bullish crossover ONLY in uptrend
+    df.loc[
+        (df["SMA_Short"] > df["SMA_Long"]) &
+        (df["Close"] > df["SMA_Trend"]),
+        "Signal"
+    ] = 1
 
-    # Position change (trade execution points)
+    # Exit condition
+    df.loc[
+        (df["SMA_Short"] < df["SMA_Long"]) |
+        (df["Close"] < df["SMA_Trend"]),
+        "Signal"
+    ] = 0
+
+    # ======================
+    # Position Change
+    # ======================
     df["Position"] = df["Signal"].diff()
 
     return df
