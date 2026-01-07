@@ -1,23 +1,24 @@
-import numpy as np
-import pandas as pd
-
-
+# src/performance.py
 
 import numpy as np
 import pandas as pd
+
+
+TRADING_DAYS = 252
 
 
 # =========================
-# STEP 6 — Strategy Metrics
+# Strategy Metrics
 # =========================
 def calculate_strategy_metrics(df, risk_free_rate=0.0):
     returns = df["Strategy_Return"].dropna()
 
-    total_return = df["Cumulative_Strategy"].iloc[-1] - 1
+    annual_return = (1 + returns.mean()) ** TRADING_DAYS - 1
+    annual_vol = returns.std() * np.sqrt(TRADING_DAYS)
 
     sharpe_ratio = (
-        np.sqrt(252) * (returns.mean() - risk_free_rate) / returns.std()
-        if returns.std() != 0 else 0
+        (annual_return - risk_free_rate) / annual_vol
+        if annual_vol != 0 else 0
     )
 
     cumulative = df["Cumulative_Strategy"]
@@ -26,27 +27,34 @@ def calculate_strategy_metrics(df, risk_free_rate=0.0):
     max_drawdown = drawdown.min()
 
     return {
-        "Total Return": round(float(total_return), 4),
+        "Annual Return": round(float(annual_return), 4),
+        "Annual Volatility": round(float(annual_vol), 4),
         "Sharpe Ratio": round(float(sharpe_ratio), 4),
         "Max Drawdown": round(float(max_drawdown), 4),
     }
 
 
 # =========================
-# STEP 7 — Portfolio Metrics
+# Portfolio Metrics
 # =========================
-def calculate_metrics(df, column="Strategy_Return"):
+def calculate_metrics(df, column="Portfolio_Return", risk_free_rate=0.0):
     returns = df[column].dropna()
 
-    total_return = (1 + returns).prod() - 1
-    sharpe = returns.mean() / returns.std() if returns.std() != 0 else 0
+    annual_return = (1 + returns.mean()) ** TRADING_DAYS - 1
+    annual_vol = returns.std() * np.sqrt(TRADING_DAYS)
+
+    sharpe_ratio = (
+        (annual_return - risk_free_rate) / annual_vol
+        if annual_vol != 0 else 0
+    )
 
     cumulative = (1 + returns).cumprod()
     drawdown = cumulative / cumulative.cummax() - 1
     max_drawdown = drawdown.min()
 
     return {
-        "Total Return": round(float(total_return), 4),
-        "Sharpe Ratio": round(float(sharpe), 4),
+        "Annual Return": round(float(annual_return), 4),
+        "Annual Volatility": round(float(annual_vol), 4),
+        "Sharpe Ratio": round(float(sharpe_ratio), 4),
         "Max Drawdown": round(float(max_drawdown), 4),
     }
