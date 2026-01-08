@@ -41,6 +41,12 @@ def run_portfolio_backtest(
     # Portfolio Raw Return
     # ============================
     portfolio_return = (weights * returns).sum(axis=1)
+    # After computing portfolio returns
+    equity = (1 + portfolio_return).cumprod()
+    dd = equity / equity.cummax() - 1
+    portfolio_return[dd < -0.10] *= 0.7
+
+
 
     # ============================
     # Portfolio Volatility Targeting
