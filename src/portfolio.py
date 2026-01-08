@@ -7,13 +7,14 @@ import numpy as np
 def run_portfolio_backtest(
     strategy_results: dict,
     vol_window: int = 20,
-    target_vol: float = 0.10  # 6.3% annualized target volatility
+    target_vol: float = 0.10  # 10% annualized target volatility
 ) -> pd.DataFrame:
     """
     Combines multiple strategy backtest DataFrames into a portfolio
     using:
     - Inverse volatility (risk parity) weighting
     - Portfolio volatility targeting
+    - Drawdown-aware risk shaping (Step A)
     """
 
     returns = pd.DataFrame()
@@ -41,12 +42,23 @@ def run_portfolio_backtest(
     # Portfolio Raw Return
     # ============================
     portfolio_return = (weights * returns).sum(axis=1)
-    # After computing portfolio returns
+
+    # =====================================================
+    # Step A: Drawdown-Aware Risk Shaping (IMPROVED VERSION)
+    # =====================================================
     equity = (1 + portfolio_return).cumprod()
-    dd = equity / equity.cummax() - 1
-    portfolio_return[dd < -0.10] *= 0.7
+    rolling_peak = equity.cummax()
+    drawdown = (equity - rolling_peak) / rolling_peak
 
+    # Exposure scaling based on drawdown
+    exposure = pd.Series(1.0, index=drawdown.index)
 
+    exposure[drawdown <= -0.05] = 0.75
+    exposure[drawdown <= -0.10] = 0.50
+    exposure[drawdown <= -0.15] = 0.30
+
+    # Apply exposure scaling
+    portfolio_return = portfolio_return * exposure
 
     # ============================
     # Portfolio Volatility Targeting
