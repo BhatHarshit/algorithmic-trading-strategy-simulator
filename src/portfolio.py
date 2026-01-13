@@ -23,6 +23,7 @@ def run_portfolio_backtest(
     - Step A: drawdown-aware risk shaping
     - Step B: regime-aware volatility scaling
     - Step C: loss asymmetry dampening
+    - Transaction costs & slippage (realism layer)
     """
 
     returns = pd.DataFrame()
@@ -30,6 +31,7 @@ def run_portfolio_backtest(
     # ============================
     # Collect Strategy Returns
     # ============================
+    # Combine strategy-level returns into a single DataFrame
     for ticker, df in strategy_results.items():
         returns[ticker] = df["Strategy_Return"]
 
@@ -38,22 +40,26 @@ def run_portfolio_backtest(
     # ============================
     # Asset Volatility Estimation
     # ============================
+    # Rolling volatility per asset used for risk parity
     asset_vol = returns.rolling(vol_window).std()
 
     # ============================
     # Inverse Volatility Weights
     # ============================
+    # Lower volatility assets get higher weights
     inv_vol = 1 / asset_vol
     weights = inv_vol.div(inv_vol.sum(axis=1), axis=0)
 
     # ============================
     # Portfolio Raw Return
     # ============================
+    # Weighted sum of individual strategy returns
     portfolio_return = (weights * returns).sum(axis=1)
 
     # ============================
     # Step A: Drawdown-Aware Risk Shaping
     # ============================
+    # Reduce risk when portfolio drawdown exceeds -10%
     equity = (1 + portfolio_return).cumprod()
     drawdown = equity / equity.cummax() - 1
     portfolio_return[drawdown < -0.10] *= 0.7
@@ -61,6 +67,7 @@ def run_portfolio_backtest(
     # ============================
     # Portfolio Volatility Targeting
     # ============================
+    # Scale returns to maintain a stable annualized volatility
     portfolio_vol = portfolio_return.rolling(vol_window).std() * np.sqrt(252)
     scaling_factor = target_vol / portfolio_vol
     scaling_factor = scaling_factor.clip(upper=1.5)
@@ -69,6 +76,7 @@ def run_portfolio_backtest(
     # ============================
     # Step B: Regime-Aware Scaling
     # ============================
+    # Detect volatility regime by comparing short vs long-term volatility
     long_term_vol = (
         portfolio_return_scaled
         .rolling(regime_window)
@@ -77,13 +85,17 @@ def run_portfolio_backtest(
     )
 
     regime_ratio = portfolio_vol / long_term_vol
+
+    # Reduce exposure in high-volatility regimes
     regime_exposure = 1 / regime_ratio
     regime_exposure = regime_exposure.clip(lower=min_exposure, upper=1.0)
+
     portfolio_return_regime = portfolio_return_scaled * regime_exposure
 
     # ============================
     # Step C: Loss Asymmetry Dampening
     # ============================
+    # Gradually reduce exposure after consecutive losses
     rolling_perf = (
         portfolio_return_regime
         .rolling(loss_window)
@@ -102,6 +114,29 @@ def run_portfolio_backtest(
             )
 
     portfolio_return_final = portfolio_return_regime * loss_exposure
+
+    # ============================
+    # Transaction Costs & Slippage
+    # ============================
+    # Assumptions:
+    # - Transaction cost represents brokerage, taxes, exchange fees
+    # - Slippage represents imperfect order execution
+    TRANSACTION_COST = 0.0005   # 0.05% per trade
+    SLIPPAGE = 0.0002           # 0.02% per trade
+    TOTAL_COST = TRANSACTION_COST + SLIPPAGE
+
+    # Approximate portfolio exposure using absolute return as a proxy
+    # Changes in exposure imply trades → costs are applied
+    exposure = portfolio_return_final.abs()
+
+    # Detect when portfolio exposure changes (i.e., rebalancing occurs)
+    exposure_change = exposure.diff().abs().fillna(0)
+
+    # Apply costs only when exposure changes
+    trading_cost = exposure_change * TOTAL_COST
+
+    # Subtract trading cost from portfolio returns
+    portfolio_return_final = portfolio_return_final - trading_cost
 
     # ============================
     # Final Portfolio DataFrame
